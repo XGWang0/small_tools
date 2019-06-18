@@ -20,6 +20,14 @@ SPEC_CTRL_L1D_FLUSH_NO="spec-ctrl=l1d-flush=no"
 SPEC_CTRL_NO_FLAG=0
 SPEC_CTRL_NO="spec-ctrl=no"
 
+SPEC_CTRL_XEN_NO="spec-ctrl=xen=no"
+SPEC_CTRL_HVM_NO="spec-ctrl=hvm=no"
+SPEC_CTRL_PV_NO="spec-ctrl=pv=no"
+
+SPEC_CTRL_MDS_NO="spec-ctrl=mds=no"
+SPEC_CTRL_MD_CLEAR_NO="spec-ctrl=md-clear=no"
+
+
 XPTI_OFF_FLAG=0
 XPTI_OFF="xpti=off"
 
@@ -72,6 +80,30 @@ function parse_xl_params() {
 		echo $param, "-------------"
 	done
 	
+}
+
+function vailidate_host_sshd()
+{
+	declare host_ip=$1
+	local timeout=$2
+	declare port=$3
+
+	[ -z "${port}" ] && port="22"
+
+
+	t=1
+
+	while [ $t -lt $timeout ]
+	do
+
+		if nc -zv -w 5 ${host_ip} 22 2>&1 | grep -q succeeded; then 
+			return 0
+		fi
+		t=`expr $t + 5`
+		sleep 1
+	done
+	PRINT ERROR "Host is down status within time checking"
+	exit 1
 }
 
 
@@ -153,12 +185,11 @@ function get_guest_ip_addr() {
 }
 
 
-
-
 function set_parse_xl_params() {
 	local catagoary=$1
 	local sub_options=""
 
+	PRINT INFO "Set XL Param as ${catagoary}"
 	case ${catagoary} in
 		HVM_FULL_DISABLE)
 			sub_options=" ${CPUID_ALL_OFF} ${XPTI_OFF} ${SPEC_CTRL_NO} "
@@ -186,6 +217,21 @@ function set_parse_xl_params() {
 		PV_L1TF_ENABLE)
 			sub_options=" ${XPTI_OFF} ${PV_L1TF_ON}  "
 			;;
+		XEN_DISABLE_ONLY)
+			sub_options=" ${SPEC_CTRL_XEN_NO}"
+			;;
+		HVM_DISABLE_ONLY)
+			sub_options=" ${SPEC_CTRL_HVM_NO}"
+			;;
+		PV_DISABLE_ONLY)
+			sub_options=" ${SPEC_CTRL_PV_NO}"
+			;;
+		MDS_DISABLE_ONLY)
+			sub_options=" ${SPEC_CTRL_MDS_NO}"
+			;;
+		MD-CLEAR_DISABLE_ONLY)
+			sub_options=" ${SPEC_CTRL_MD_CLEAR_NO}"
+			;;
 		default)
 			PRINT ERROR  "Input WORD ${catagoary} is in-available" && exit 1
 			;;
@@ -203,6 +249,135 @@ function set_parse_xl_params() {
 	fi
 	cp /boot/grub2/grub.cfg /boot/grub2/grub.cfg.`date +%Y%m%d%H%M`
 	grub2-mkconfig -o  /boot/grub2/grub.cfg
+	reboot
+}
+
+
+
+
+function _verify_xl_result() {
+
+	local vul_value_cmd="xl dmesg  | grep -i -A 10  Speculative"
+	local xlinfo=`xl info | grep xen_commandline`
+
+	local output=`echo $vul_value_cmd | bash`
+
+
+	echo "=================================================="
+	PRINT INFO "XL Param:${xlinfo}"
+	echo
+	PRINT INFO "XL Dmesg:$output"
+	echo
+	for value in "$@"
+	do
+		if echo $output | grep -i "$value" > /dev/null;then
+			PRINT INFO "Pass"
+		else
+			PRINT INFO  "Fail; Execpted Value:${value}, Actual Value:${output}"
+		fi
+
+	done
+	echo "=================================================="
+	echo
+}
+
+
+
+
+function verify_xl_dmesg() {
+	local host_ip=$1
+	local catagoary=$2
+	local password=susetesting
+	MELTDOWN_ON_VALUE="XPTI (64-bit PV only): Dom0 enabled, DomU enabled"
+	MELTDOWN_OFF_VALUE="XPTI (64-bit PV only): Dom0 disabled, DomU disabled"
+	MELTDOWN_DOM0_OFF_VALUE="XPTI (64-bit PV only): Dom0 disabled, DomU enabled"
+
+	SPEC_CTRL_NO_VALUE="Xen settings: BTI-Thunk JMP, SPEC_CTRL: IBRS- SSBD-, Other:"
+	SPEC_CTRL_NO_FOR_VM_VALUE="Support for VMs: PV: None, HVM: None"	
+	
+
+
+
+	case ${catagoary} in
+		HVM_FULL_DISABLE)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		PV_FULL_DISABLE)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		DEFAULT|HVM_DEFAULT|PV_DEFAULT|HVM_L1TF_ENABLE)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		HVM_PTI_ENABLE|HVM_SPEC2_ENABLE|HVM_SPEC2_USER_ENABLE|HVM_SPEC4_ENABLE)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		HVM_L1TF_FULL_ENABLE)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		PV_PTI_ENABLE)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		PV_SPEC2_ENABLE|PV_SPEC2_USER_ENABLE|PV_SPEC4_ENABLE)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		PV_L1TF_FULL_ENABLE)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		PV_L1TF_ENABLE)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		XEN_DISABLE_ONLY)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		HVM_DISABLE_ONLY)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		PV_DISABLE_ONLY)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		MDS_DISABLE_ONLY)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		MD-CLEAR_DISABLE_ONLY)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+			;;
+		default)
+			PRINT ERROR  "Input WORD ${catagoary} is in-available" && exit 1
+			;;
+	esac
+
+
+}
+
+function set_xen_kernel() {
+	local host_ip=$1
+	local case=$2
+
+
+	PRINT INFO "HOST: [ ${host_ip}]"
+
+	sshpass -p susetesting ssh root@${host_ip} "$(typeset -f);$(typeset -p); set_parse_xl_params ${case}"
+
+}
+
+
+function mitigation_xen_func_test() {
+	local host_ip=$1
+	shift
+	local user_testcase=$@
+	full_testcases="DEFAULT PV_FULL_DISABLE HVM_PTI_ENABLE PV_SPEC2_ENABLE PV_L1TF_FULL_ENABLE XEN_DISABLE_ONLY HVM_DISABLE_ONLY PV_DISABLE_ONLY MDS_DISABLE_ONLY MD-CLEAR_DISABLE_ONLY"
+	
+	testcases=$user_testcase
+	[ -z "${user_testcase}" ] && testcases=$full_testcases 
+
+	for case in $testcases
+	do
+		vailidate_host_sshd $host_ip 600
+		set_xen_kernel $host_ip $case & sleep 10
+		vailidate_host_sshd $host_ip 600
+		verify_xl_dmesg $host_ip $case
+	done
+
 }
 
 
@@ -240,8 +415,12 @@ function start_vm() {
 	if virsh list | grep $guestname >/dev/null;then
 		:
 	else
-		virsh start $guestname
-		[ $? -ne 0 ] && exit -1
+        output=`virsh start $guestname`
+        if [ $? -ne 0 ];then
+                if ! echo $output | grep -i "Domain is already running" > /dev/null;then
+                        exit -1
+                fi
+        fi
 	fi
 
 }
@@ -284,7 +463,7 @@ function set_kernel_params() {
 	sed -ie "/^GRUB_CMDLINE_LINUX=/s/\".*\"/\" loglevel=0 $param \"/g" /etc/default/grub
 	grub2-mkconfig -o /boot/grub2/grub.cfg
 	echo "Finished kernel setting for [$param]"
-	reboot
+	sync && poweroff
 }
 
 
@@ -407,6 +586,8 @@ function verify_result() {
 
 
 	echo "=================================================="
+	echo -e $output
+	echo
 	for value in "$@"
 	do
 		if echo $output | grep -i "$value" > /dev/null;then
@@ -434,27 +615,72 @@ function verify_mitigation_result(){
 	fi
 	local guestip=$(get_guest_ip_addr ${guestname}) 
 
+	# Meltdown expected result
+	MELTDOWN_HVM_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/meltdown:Mitigation: PTI"
+	MELTDOWN_HVM_OFF_VALUE="/sys/devices/system/cpu/vulnerabilities/meltdown:Vulnerable"
+	MELTDOWN_PV_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/meltdown:Unknown (XEN PV detected, hypervisor mitigation required)"
 
-	MELTDOWN_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/meltdown:Mitigation: PTI"
-	MELTDOWN_OFF_VALUE="/sys/devices/system/cpu/vulnerabilities/meltdown:Vulnerable"
+	# Spectre_v2 expected result
+	SPECTRE_V2_HVM_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/spectre_v2:Mitigation: Full generic retpoline, IBPB: conditional, IBRS_FW, RSB filling"
+	SPECTRE_V2_PV_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/spectre_v2:Mitigation: Full generic retpoline, IBPB: conditional, IBRS_FW, STIBP: conditional, RSB filling"
 
-	SPECTRE_V2_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/spectre_v2:Mitigation: Full generic retpoline, IBPB: conditional, IBRS_FW, RSB filling"
+	SPECTRE_V2_PV_FORCE_VALUE="/sys/devices/system/cpu/vulnerabilities/spectre_v2:Mitigation: Full generic retpoline, IBPB: always-on, IBRS_FW, STIBP: forced, RSB filling"
+
 	SPECTRE_V2_OFF_VALUE="/sys/devices/system/cpu/vulnerabilities/spectre_v2:Vulnerable, IBPB: disabled, STIBP: disabled"
 
-	SPECTRE_V2_ON_USER_VALUE="/sys/devices/system/cpu/vulnerabilities/spectre_v2:Mitigation: Full generic retpoline, IBPB: always-on, IBRS_FW, RSB filling"
-	SPECTRE_V2_USER_PRCTL_VALUE="Spectre V2 : User space: Mitigation: STIBP via prctl"
-	SPECTRE_V2_USER_SECCOMP_VALUE="Spectre V2 : User space: Mitigation: STIBP via seccomp and prctl"
+	# Spectre_v2 user expected result
+	SPECTRE_V2_USER_HVM_IBPB_VALUE="/sys/devices/system/cpu/vulnerabilities/spectre_v2:Mitigation: Full generic retpoline, IBPB: always-on, IBRS_FW, RSB filling"
+	SPECTRE_V2_USER_PV_IBPB_VALUE="/sys/devices/system/cpu/vulnerabilities/spectre_v2:Mitigation: Full generic retpoline, IBPB: always-on, IBRS_FW, STIBP: conditional, RSB filling"
+	# Ssepctre_v2 user dmesg expected result
+	SPECTRE_V2_USER_HVM_PRCTL_VALUE="Spectre V2 : User space: Mitigation: STIBP via prctl"
+	SPECTRE_V2_USER_HVM_SECCOMP_VALUE="Spectre V2 : User space: Mitigation: STIBP via seccomp and prctl"
+	SPECTRE_V2_USER_HVM_ON_VALUE="Spectre V2 : User space: Mitigation: STIBP protection"
 
 
-	SPECTRE_V4_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/spec_store_bypass:Mitigation: Speculative Store Bypass disabled via prctl and seccomp"
+	# Spectre_v4 expected result
+	SPECTRE_V4_HVM_SECCOMP_VALUE="/sys/devices/system/cpu/vulnerabilities/spec_store_bypass:Mitigation: Speculative Store Bypass disabled via prctl and seccomp"
+	SPECTRE_V4_HVM_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/spec_store_bypass:Mitigation: Speculative Store Bypass disabled"
 	SPECTRE_V4_OFF_VALUE="/sys/devices/system/cpu/vulnerabilities/spec_store_bypass:Vulnerable"
-	SPECTRE_V4_PRCTL_VALUE="/sys/devices/system/cpu/vulnerabilities/spec_store_bypass:Mitigation: Speculative Store Bypass disabled via prctl"
-	SPECTRE_V4_SECCOMP_VALUE=${SPECTRE_V4_ON_VALUE}
+	SPECTRE_V4_HVM_PRCTL_VALUE="/sys/devices/system/cpu/vulnerabilities/spec_store_bypass:Mitigation: Speculative Store Bypass disabled via prctl"
 
 
 	SPECTRE_MDS_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/mds:Mitigation: Clear CPU buffers; SMT Host state unknown"
 	SPECTRE_MDS_OFF_VALUE="/sys/devices/system/cpu/vulnerabilities/mds:Vulnerable; SMT Host state unknown"
 
+	if xl list --long ${guestname} | grep 'type.*pv'> /dev/null;then
+		MELTDOWN_ON_VALUE=${MELTDOWN_PV_ON_VALUE}
+		MELTDOWN_OFF_VALUE=${MELTDOWN_PV_ON_VALUE}
+
+		SPECTRE_V2_AUTO_VALUE=${SPECTRE_V2_HVM_PV_AUTO_ON_VALUE}
+		SPECTRE_V2_ON_VALUE=${SPECTRE_V2_PV_FORCE_VALUE}
+	
+		SPECTRE_V2_USER_ON_VALUE=${SPECTRE_V2_USER_HVM_ON_VALUE}
+		SPECTRE_V2_USER_IBPB_VALUE=${SPECTRE_V2_USER_PV_IBPB_VALUE}
+		SPECTRE_V2_USER_PRCTL_VALUE=${SPECTRE_V2_USER_HVM_PRCTL_VALUE}
+		SPECTRE_V2_USER_SECCOMP_VALUE=${SPECTRE_V2_USER_HVM_SECCOMP_VALUE}
+
+		
+		SPECTRE_V4_ON_VALUE=${SPECTRE_V4_HVM_ON_VALUE}
+		SPECTRE_V4_SECCOMP_VALUE=${SPECTRE_V4_HVM_ON_VALUE}
+		SPECTRE_V4_PRCTL_VALUE=${SPECTRE_V4_HVM_PRCTL_VALUE}
+	else
+		MELTDOWN_ON_VALUE=${MELTDOWN_HVM_ON_VALUE}
+		MELTDOWN_OFF_VALUE=${MELTDOWN_HVM_OFF_VALUE}
+
+		SPECTRE_V2_AUTO_VALUE=${SPECTRE_V2_HVM_PV_AUTO_ON_VALUE}
+		SPECTRE_V2_ON_VALUE=${SPECTRE_V2_AUTO_VALUE}
+
+
+		SPECTRE_V2_USER_ON_VALUE=${SPECTRE_V2_USER_HVM_ON_VALUE}
+		SPECTRE_V2_USER_IBPB_VALUE=${SPECTRE_V2_USER_HVM_IBPB_VALUE}
+		SPECTRE_V2_USER_PRCTL_VALUE=${SPECTRE_V2_USER_HVM_PRCTL_VALUE}
+		SPECTRE_V2_USER_SECCOMP_VALUE=${SPECTRE_V2_USER_HVM_SECCOMP_VALUE}
+
+
+		SPECTRE_V4_ON_VALUE=${SPECTRE_V4_HVM_ON_VALUE}
+		SPECTRE_V4_SECCOMP_VALUE=${SPECTRE_V4_HVM_ON_VALUE}
+		SPECTRE_V4_PRCTL_VALUE=${SPECTRE_V4_HVM_PRCTL_VALUE}
+	fi
 
 	PRINT INFO "Verify Test Case [$param]"
 	PRINT INFO "Current Kernl Param:"
@@ -462,7 +688,7 @@ function verify_mitigation_result(){
 	echo
 	case ${param} in 
 		MITIGATION_AUTO)
-		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\" \"${MELTDOWN_ON_VALUE}\" \"${SPECTRE_V2_ON_VALUE}\" \"${SPECTRE_V4_ON_VALUE}\" \"${SPECTRE_MDS_ON_VALUE}\" "
+		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\" \"${MELTDOWN_ON_VALUE}\" \"${SPECTRE_V2_AUTO_VALUE}\" \"${SPECTRE_V4_ON_VALUE}\" \"${SPECTRE_MDS_ON_VALUE}\" "
 		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"dmesg\"   \"${SPECTRE_V2_USER_SECCOMP_VALUE}\"  "
 
 		;;
@@ -470,12 +696,12 @@ function verify_mitigation_result(){
 		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\" \"${MELTDOWN_OFF_VALUE}\"  \"${SPECTRE_V2_OFF_VALUE}\" \"${SPECTRE_V4_OFF_VALUE}\" \"${SPECTRE_MDS_OFF_VALUE}\" "
 		;;
 		MITIGATION_AUTO_NOSMT)
-		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\" \"${MELTDOWN_ON_VALUE}\" \"${SPECTRE_V2_ON_VALUE}\"  \"${SPECTRE_V4_ON_VALUE}\" \"${SPECTRE_MDS_ON_VALUE}\" "
+		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\" \"${MELTDOWN_ON_VALUE}\" \"${SPECTRE_V2_AUTO_VALUE}\"  \"${SPECTRE_V4_ON_VALUE}\" \"${SPECTRE_MDS_ON_VALUE}\" "
 		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"dmesg\"   \"${SPECTRE_V2_USER_SECCOMP_VALUE}\"  "
 		;;
 		POSITIVE_ALL_OPTS)
-		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\" \"${MELTDOWN_ON_VALUE}\" \"${SPECTRE_V2_ON_USER_VALUE}\"  \"${SPECTRE_V4_ON_VALUE}\" \"${SPECTRE_MDS_ON_VALUE}\" "
-		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"dmesg\"   \"${SPECTRE_V2_USER_SECCOMP_VALUE}\"  "
+		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\" \"${MELTDOWN_ON_VALUE}\" \"${SPECTRE_V2_ON_VALUE}\"  \"${SPECTRE_V4_ON_VALUE}\" \"${SPECTRE_MDS_ON_VALUE}\" "
+		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"dmesg\"   \"${SPECTRE_V2_USER_ON_VALUE}\"  "
 		;;
 		NAGATIVE_ALL_OPTS_OFF)
 		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\" \"${MELTDOWN_OFF_VALUE}\"  \"${SPECTRE_V2_OFF_VALUE}\" \"${SPECTRE_V4_OFF_VALUE}\" \"${SPECTRE_MDS_OFF_VALUE}\" "
@@ -488,21 +714,21 @@ function verify_mitigation_result(){
 		#SPECTRE_V4_PRCTL="spec_store_bypass_disable=prctl"
 		#SPECTRE_V2_USER_PRCTL="spectre_v2_user=prctl"
 		#MDS_ON_NOSMT="mds=full,nosmt"
-		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\"   \"${SPECTRE_V2_ON_VALUE}\" \"${SPECTRE_V4_PRCTL_VALUE}\" \"${SPECTRE_MDS_ON_VALUE}\" "
+		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\"   \"${SPECTRE_V2_AUTO_VALUE}\" \"${SPECTRE_V4_PRCTL_VALUE}\" \"${SPECTRE_MDS_ON_VALUE}\" "
 		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"dmesg\"   \"${SPECTRE_V2_USER_PRCTL_VALUE}\"  "
 		;;
 		RANDOM_SETTING2)
 		#SPECTRE_V4_SECCOMP="spec_store_bypass_disable=seccomp"
 		#SPECTRE_V2_USER_SECCOMP="spectre_v2_user=seccomp"
-		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\"   \"${SPECTRE_V2_ON_VALUE}\" \"${SPECTRE_V4_SECCOMP_VALUE}\"  "
+		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\"   \"${SPECTRE_V2_AUTO_VALUE}\" \"${SPECTRE_V4_SECCOMP_VALUE}\"  "
 		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"dmesg\"   \"${SPECTRE_V2_USER_SECCOMP_VALUE}\"  "
 		;;
 		SPECTRE_V2_PRCTL_IBPB)
-		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\"   \"${SPECTRE_V2_ON_USER_VALUE}\"  "
+		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\"   \"${SPECTRE_V2_AUTO_VALUE}\"  "
 		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"dmesg\"   \"${SPECTRE_V2_USER_PRCTL_VALUE}\" "
 		;;
 		SPECTRE_V2_SECCOMP_IBPB)
-		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\"   \"${SPECTRE_V2_ON_USER_VALUE}\"   "
+		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"sys\"   \"${SPECTRE_V2_AUTO_VALUE}\"   "
 		sshpass -p ${password} ssh root@${guestip} "$(typeset -f ); verify_result \"dmesg\"   \"${SPECTRE_V2_USER_SECCOMP_VALUE}\" "
 		;;
 		*)
@@ -547,7 +773,21 @@ function usage(){
 
 		 TRANS_FILE \$GUESTNAME     
 
-		 COLLECT_FILE \$GUESTNAME \$LOCATION"
+		 COLLECT_FILE \$GUESTNAME \$LOCATION
+
+		 MITIGATION_GUEST_TEST \$GUESTNAME \$CASELIST:
+				MITIGATION_AUTO
+				MITIGATION_OFF 
+				MITIGATION_AUTO_NOSMT 
+				POSITIVE_ALL_OPTS 
+				NAGATIVE_ALL_OPTS_OFF 
+				NAGATIVE_ALL_OPTS_NO 
+				RANDOM_SETTING1 
+				RANDOM_SETTING2 
+				SPECTRE_V2_PRCTL_IBPB 
+				SPECTRE_V2_SECCOMP_IBPB
+
+		 MITIGATION_XEN_TEST \$HOST \$TESTCASE"
 		 exit -1
 }
 
@@ -563,13 +803,21 @@ case $1 in
 	COLLECT_FILE)
 		collect_hy_files $2 $3
 		;;
+	MITIGATION_GUEST_TEST)
+		shift
+		mitigation_func_test $*
+		;;
+	MITIGATION_XEN_TEST)
+		shift
+		mitigation_xen_func_test $*
 	*)
 		echo
 		#usage
 		;;
 esac
 
+mitigation_xen_func_test $*
 #set_guest_kernel $1 MITIGATION_AUTO
-mitigation_func_test $* 
+#mitigation_func_test $* 
 #set_parse_xl_params $1
 #transfer_file2_guest $1 nots3cr3t 
