@@ -189,7 +189,7 @@ function set_parse_xl_params() {
 	local catagoary=$1
 	local sub_options=""
 
-	PRINT INFO "Set XL Param as ${catagoary}"
+	PRINT INFO "Set XL Param as [${catagoary}]"
 	case ${catagoary} in
 		HVM_FULL_DISABLE)
 			sub_options=" ${CPUID_ALL_OFF} ${XPTI_OFF} ${SPEC_CTRL_NO} "
@@ -810,6 +810,7 @@ case $1 in
 	MITIGATION_XEN_TEST)
 		shift
 		mitigation_xen_func_test $*
+		;;
 	*)
 		echo
 		#usage
