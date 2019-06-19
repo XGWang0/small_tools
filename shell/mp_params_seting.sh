@@ -290,7 +290,9 @@ function set_parse_xl_params() {
 
 function _verify_xl_result() {
 	local param=$1
-	[ -z "$param" ] && param="X"
+	if [ "$param" == "-v" ];then
+		shift
+	fi
 	local vul_value_cmd="xl dmesg  | grep -i -A 10  Speculative"
 	local xlinfo=`xl info | grep xen_commandline`
 
@@ -361,6 +363,9 @@ SPEC_CTRL_ON_FOR_HVM_OLD_VALUE="Support for HVM VMs: MSR_SPEC_CTRL EAGER_FPU MD_
 SPEC_CTRL_ON_FOR_PV_NEW_VALUE="Support for PV VMs: MSR_SPEC_CTRL RSB EAGER_FPU MD_CLEAR"
 SPEC_CTRL_ON_FOR_PV_OLD_VALUE="Support for PV VMs: MSR_SPEC_CTRL EAGER_FPU MD_CLEAR"
 
+SPEC_CTRL_HVM_MSR_NO_VALUE="Support for HVM VMs: RSB EAGER_FPU MD_CLEAR"
+SPEC_CTRL_PV_MSR_NO_VALUE="Support for PV VMs: RSB EAGER_FPU MD_CLEAR"
+
 SPEC_CTRL_OFF_FOR_HVM_VALUE="Support for HVM VMs: None MD_CLEAR"
 SPEC_CTRL_OFF_FOR_PV_VALUE="Support for PV VMs: None MD_CLEAR"
 
@@ -406,7 +411,7 @@ function verify_xl_dmesg() {
 		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" \"${SPEC_CTRL_ALL_OFF_VALUE}\"  \"${SPEC_CTRL_OFF_FOR_HVM_VALUE}\"   \"${SPEC_CTRL_OFF_FOR_PV_VALUE}\" \"${PV_L1TF_DEFAULT_VALUE}\" "
 			;;
 		PV_FULL_DISABLE)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" \"${SPEC_CTRL_XEN_OFF_VALUE}\"  \"${SPEC_CTRL_OFF_FOR_HVM_VALUE}\"   \"${SPEC_CTRL_OFF_FOR_PV_VALUE}\"  \"${PV_L1TF_OFF_VALUE}\"  "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" \"${SPEC_CTRL_ALL_OFF_VALUE}\"  \"${SPEC_CTRL_OFF_FOR_HVM_VALUE}\"   \"${SPEC_CTRL_OFF_FOR_PV_VALUE}\"  \"${PV_L1TF_OFF_VALUE}\"  "
 			;;
 		DEFAULT|HVM_DEFAULT|PV_DEFAULT|HVM_L1TF_ENABLE)
 		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_DEFAULT_VALUE}\" \"${SPEC_CTRL_DEFAULT_VALUE}\"  \"${PV_L1TF_DEFAULT_VALUE}\"   \"${SPEC_CTRL_DEFAULT_FOR_PV_VALUE}\" \"${SPEC_CTRL_DEFAULT_FOR_HVM_VALUE}\" "
@@ -463,7 +468,7 @@ function verify_xl_dmesg() {
 		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${PV_L1TF_DOM0_OFF_VALUE}\" "
 			;;
 		SPEC_CTRL_MSR_SC_OFF)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${SPEC_CTRL_OFF_FOR_HVM_VALUE}\" \"${SPEC_CTRL_OFF_FOR_PV_VALUE}\"  "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${SPEC_CTRL_PV_MSR_NO_VALUE}\" \"${SPEC_CTRL_HVM_MSR_NO_VALUE}\"  "
 			;;
 		default)
 			PRINT ERROR  "Input WORD ${catagoary} is in-available" && exit 1
@@ -517,14 +522,14 @@ function_mitigation_xen_combination_func_test() {
 
 	for case in $testcases
 	do
-		echo "bbb, $case"
-#		vailidate_host_sshd $host_ip 600
-#		set_xen_kernel $host_ip $case & sleep 10
-#		vailidate_host_sshd $host_ip 600
-#		verify_xl_dmesg $host_ip $case
+		PRINT INFO "HYPER CASE: $case"
+		vailidate_host_sshd $host_ip 600
+		set_xen_kernel $host_ip $case & sleep 10
+		vailidate_host_sshd $host_ip 600
+		verify_xl_dmesg $host_ip $case
 		for guest in `echo ${guest_name} | sed "s/,/ /g"`
 		do
-			echo "aaaaaaaaa,$guest"
+			PRINT INFO "GUEST:$guest On Case $case"
 			sshpass -p susetesting ssh root@${host_ip} "$(typeset -f);$(typeset -p); mitigation_func_test ${guest} MITIGATION_AUTO POSITIVE_ALL_OPTS "
 		done
 	done
@@ -725,7 +730,7 @@ function verify_result() {
 	shift
 
 	local vul_value_cmd="grep . -H /sys/devices/system/cpu/vulnerabilities/*"
-        local vul_value_dmesg_cmd="dmesg | grep -i spect "
+    local vul_value_dmesg_cmd="dmesg | grep -i spect "
 
 
 	if [ ${ver_obj} == "sys" ];then
@@ -734,9 +739,12 @@ function verify_result() {
 		output=`echo $vul_value_dmesg_cmd | bash`
 	fi
 
-
+	cpu_flags=`echo "lscpu | grep Flags" | bash`
 	echo "=================================================="
+	PRINT INFO "Cpu Flags:$cpu_flags"
+	echo "--------------------------------------------------"
 	echo -e $output
+	echo "--------------------------------------------------"
 	echo
 	for value in "$@"
 	do
