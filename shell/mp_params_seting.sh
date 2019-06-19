@@ -792,6 +792,7 @@ function verify_mitigation_result(){
 	# Ssepctre_v2 user dmesg expected result
 	SPECTRE_V2_USER_HVM_PRCTL_VALUE="Spectre V2 : User space: Mitigation: STIBP via prctl"
 	SPECTRE_V2_USER_HVM_SECCOMP_VALUE="Spectre V2 : User space: Mitigation: STIBP via seccomp and prctl"
+	SPECTRE_V2_USER_OFF_VALUE="Spectre V2 : User space: Vulnerable"
 	SPECTRE_V2_USER_HVM_ON_VALUE="Spectre V2 : User space: Mitigation: STIBP protection"
 
 
