@@ -17,6 +17,12 @@ UCODE_FLAG=0
 SPEC_CTRL_L1D_FLUSH_NO_FLAG=0
 SPEC_CTRL_L1D_FLUSH_NO="spec-ctrl=l1d-flush=no"
 
+SPEC_CTRL_BTI_RETPOLINE="spec-ctrl=bti-thunk=retpoline"
+SPEC_CTRL_BTI_JMP="spec-ctrl=bti-thunk=jmp"
+
+SPEC_CTRL_MSR_SC_NO="spec-ctrl=msr-sc=no"
+
+
 SPEC_CTRL_NO_FLAG=0
 SPEC_CTRL_NO="spec-ctrl=no"
 
@@ -30,12 +36,18 @@ SPEC_CTRL_MD_CLEAR_NO="spec-ctrl=md-clear=no"
 
 XPTI_OFF_FLAG=0
 XPTI_OFF="xpti=off"
+XPTI_DOM0_ON="xpti=dom0=true"
+XPTI_DOMU_ON="xpti=domu=true"
+
 
 PV_L1TF_OFF_FLAG=0
 PV_L1TF_OFF="pv-l1tf=off"
 
 PV_L1TF_ON_FLAG=0
 PV_L1TF_ON="pv-l1tf=on"
+PV_L1TF_DOM0_ON_DOMU_OFF="pv-l1tf=dom0=true,domu=false"
+PV_L1TF_DOM0_OFF_DOMU_ON="pv-l1tf=dom0=false,domu=true"
+
 
 SMT_OFF_FLAG=0
 SMT_OFF="smt=off"
@@ -189,7 +201,7 @@ function set_parse_xl_params() {
 	local catagoary=$1
 	local sub_options=""
 
-	PRINT INFO "Set XL Param as [${catagoary}]"
+	PRINT INFO "Set XL Param as ${catagoary}"
 	case ${catagoary} in
 		HVM_FULL_DISABLE)
 			sub_options=" ${CPUID_ALL_OFF} ${XPTI_OFF} ${SPEC_CTRL_NO} "
@@ -232,6 +244,27 @@ function set_parse_xl_params() {
 		MD-CLEAR_DISABLE_ONLY)
 			sub_options=" ${SPEC_CTRL_MD_CLEAR_NO}"
 			;;
+		BTI_RETPOLINE_ONLY)
+			sub_options=" ${SPEC_CTRL_BTI_RETPOLINE}"
+			;;
+		BTI_JMP_ONLY)
+			sub_options=" ${SPEC_CTRL_BTI_JMP}"
+			;;
+		XPTI_DOM0_ENABLE_ONLY)
+			sub_options=" ${XPTI_DOM0_ON}"
+			;;
+		XPTI_DOMU_ENABLE_ONLY)
+			sub_options=" ${XPTI_DOMU_ON}"
+			;;
+		PV_L1TF_DOM0_ON_DOMU_OFF)
+			sub_options=" ${PV_L1TF_DOM0_ON_DOMU_OFF}"
+			;;
+		PV_L1TF_DOM0_OFF_DOMU_ON)
+			sub_options=" ${PV_L1TF_DOM0_OFF_DOMU_ON}"
+			;;
+		SPEC_CTRL_MSR_SC_OFF)
+			sub_options=" ${SPEC_CTRL_MSR_SC_NO}"
+			;;
 		default)
 			PRINT ERROR  "Input WORD ${catagoary} is in-available" && exit 1
 			;;
@@ -256,7 +289,8 @@ function set_parse_xl_params() {
 
 
 function _verify_xl_result() {
-
+	local param=$1
+	[ -z "$param" ] && param="X"
 	local vul_value_cmd="xl dmesg  | grep -i -A 10  Speculative"
 	local xlinfo=`xl info | grep xen_commandline`
 
@@ -270,10 +304,20 @@ function _verify_xl_result() {
 	echo
 	for value in "$@"
 	do
+
 		if echo $output | grep -i "$value" > /dev/null;then
-			PRINT INFO "Pass"
+			if [ "$param" == "-v" ];then
+				PRINT INFO  "Fail; Execpted Value:${value}, Actual Value:${output}"
+			else
+				PRINT INFO "Pass"
+			fi
 		else
-			PRINT INFO  "Fail; Execpted Value:${value}, Actual Value:${output}"
+
+			if [ "$param" == "-v" ];then
+				PRINT INFO "Pass"
+			else
+				PRINT INFO  "Fail; Execpted Value:${value}, Actual Value:${output}"
+			fi
 		fi
 
 	done
@@ -282,64 +326,144 @@ function _verify_xl_result() {
 }
 
 
+HASWELL_ARCH=1
+SKYLAKLAKE_ARCH=2
+CASECADELAKE=3
 
+MICRO_ARCH=1
+
+MELTDOWN_ON_VALUE="XPTI (64-bit PV only): Dom0 enabled, DomU enabled"
+MELTDOWN_OFF_VALUE="XPTI (64-bit PV only): Dom0 disabled, DomU disabled"
+
+if [ ${MICRO_ARCH} -eq 3 ];then
+	MELTDOWN_DEFAULT_VALUE=${MELTDOWN_OFF_VALUE}
+else
+	MELTDOWN_DEFAULT_VALUE=${MELTDOWN_ON_VALUE}
+fi
+
+MELTDOWN_DOM0_OFF_VALUE="XPTI (64-bit PV only): Dom0 disabled, DomU enabled"
+MELTDOWN_DOMU_OFF_VALUE="XPTI (64-bit PV only): Dom0 enabled, DomU disabled"
+
+SPEC_CTRL_BTI_RETPOLINE_OLD_MICRO_ARCH_VALUE="Xen settings: BTI-Thunk RETPOLINE, SPEC_CTRL: IBRS- SSBD-, Other: IBPB L1D_FLUSH VERW"
+SPEC_CTRL_BTI_RETPOLINE_NEW_MICRO_ARCH_VALUE="Xen settings: BTI-Thunk RETPOLINE, SPEC_CTRL: IBRS- SSBD-, Other: IBPB"
+
+SPEC_CTRL_BTI_JMP_VALUE="Xen settings: BTI-Thunk JMP, SPEC_CTRL: IBRS+ SSBD-, Other: IBPB L1D_FLUSH VERW"
+
+SPEC_CTRL_MDS_L1D_FLUSH_UNAFFECT_VALUE="Xen settings: BTI-Thunk JMP, SPEC_CTRL: IBRS+ SSBD-, Other: IBPB"
+
+
+SPEC_CTRL_ALL_OFF_VALUE="Xen settings: BTI-Thunk JMP, SPEC_CTRL: No, Other:"
+SPEC_CTRL_XEN_OFF_VALUE="Xen settings: BTI-Thunk JMP, SPEC_CTRL: IBRS- SSBD-, Other:"
+
+SPEC_CTRL_ON_FOR_HVM_NEW_VALUE="Support for HVM VMs: MSR_SPEC_CTRL RSB EAGER_FPU MD_CLEAR"
+SPEC_CTRL_ON_FOR_HVM_OLD_VALUE="Support for HVM VMs: MSR_SPEC_CTRL EAGER_FPU MD_CLEAR"
+
+SPEC_CTRL_ON_FOR_PV_NEW_VALUE="Support for PV VMs: MSR_SPEC_CTRL RSB EAGER_FPU MD_CLEAR"
+SPEC_CTRL_ON_FOR_PV_OLD_VALUE="Support for PV VMs: MSR_SPEC_CTRL EAGER_FPU MD_CLEAR"
+
+SPEC_CTRL_OFF_FOR_HVM_VALUE="Support for HVM VMs: None MD_CLEAR"
+SPEC_CTRL_OFF_FOR_PV_VALUE="Support for PV VMs: None MD_CLEAR"
+
+PV_L1TF_ON_VALUE="PV L1TF shadowing: Dom0 enabled, DomU enabled"
+PV_L1TF_OFF_VALUE="PV L1TF shadowing: Dom0 disabled, DomU disabled"
+PV_L1TF_DOM0_OFF_VALUE="PV L1TF shadowing: Dom0 disabled, DomU enabled"
+PV_L1TF_DOMU_OFF_VALUE="PV L1TF shadowing: Dom0 enabled, DomU disabled"
+
+MDS_VALUE="VERW"
+L1D_FLUSH="L1D_FLUSH"
+
+if [ ${MICRO_ARCH} -eq 3 ];then
+	MELTDOWN_DEFAULT_VALUE=${MELTDOWN_OFF_VALUE}
+	SPEC_CTRL_DEFAULT_VALUE=${SPEC_CTRL_MDS_L1D_FLUSH_UNAFFECT_VALUE}
+	PV_L1TF_DEFAULT_VALUE=${PV_L1TF_OFF_VALUE}
+	SPEC_CTRL_BTI_RETPOLINE_VALUE=${SPEC_CTRL_BTI_RETPOLINE_NEW_MICRO_ARCH_VALUE}
+	SPEC_CTRL_DEFAULT_FOR_HVM_VALUE=${SPEC_CTRL_ON_FOR_HVM_NEW_VALUE}
+	SPEC_CTRL_DEFAULT_FOR_PV_VALUE=${SPEC_CTRL_ON_FOR_PV_NEW_VALUE}
+elif [ ${MICRO_ARCH} -eq 2 ];then
+	MELTDOWN_DEFAULT_VALUE=${MELTDOWN_ON_VALUE}
+	SPEC_CTRL_BTI_DEFAULT_VALUE=${SPEC_CTRL_BTI_JMP_VALUE}
+	PV_L1TF_DEFAULT_VALUE=${PV_L1TF_DOM0_OFF_VALUE}
+	SPEC_CTRL_DEFAULT_FOR_HVM_VALUE=${SPEC_CTRL_ON_FOR_HVM_NEW_VALUE}
+	SPEC_CTRL_BTI_RETPOLINE_VALUE=${SPEC_CTRL_BTI_RETPOLINE_OLD_MICRO_ARCH_VALUE}
+	SPEC_CTRL_DEFAULT_FOR_PV_VALUE=${SPEC_CTRL_ON_FOR_PV_NEW_VALUE}
+elif [ ${MICRO_ARCH} -eq 1 ];then
+	MELTDOWN_DEFAULT_VALUE=${MELTDOWN_ON_VALUE}
+	SPEC_CTRL_BTI_DEFAULT_VALUE=${SPEC_CTRL_BTI_RETPOLINE_VALUE}
+	PV_L1TF_DEFAULT_VALUE=${PV_L1TF_DOM0_OFF_VALUE}
+	SPEC_CTRL_BTI_RETPOLINE_VALUE=${SPEC_CTRL_BTI_RETPOLINE_OLD_MICRO_ARCH_VALUE}
+	SPEC_CTRL_DEFAULT_FOR_HVM_VALUE=${SPEC_CTRL_ON_FOR_HVM_OLD_VALUE}
+	SPEC_CTRL_DEFAULT_FOR_PV_VALUE=${SPEC_CTRL_ON_FOR_PV_OLD_VALUE}
+
+fi
 
 function verify_xl_dmesg() {
 	local host_ip=$1
 	local catagoary=$2
 	local password=susetesting
-	MELTDOWN_ON_VALUE="XPTI (64-bit PV only): Dom0 enabled, DomU enabled"
-	MELTDOWN_OFF_VALUE="XPTI (64-bit PV only): Dom0 disabled, DomU disabled"
-	MELTDOWN_DOM0_OFF_VALUE="XPTI (64-bit PV only): Dom0 disabled, DomU enabled"
-
-	SPEC_CTRL_NO_VALUE="Xen settings: BTI-Thunk JMP, SPEC_CTRL: IBRS- SSBD-, Other:"
-	SPEC_CTRL_NO_FOR_VM_VALUE="Support for VMs: PV: None, HVM: None"	
-	
-
-
 
 	case ${catagoary} in
 		HVM_FULL_DISABLE)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" \"${SPEC_CTRL_ALL_OFF_VALUE}\"  \"${SPEC_CTRL_OFF_FOR_HVM_VALUE}\"   \"${SPEC_CTRL_OFF_FOR_PV_VALUE}\" \"${PV_L1TF_DEFAULT_VALUE}\" "
 			;;
 		PV_FULL_DISABLE)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" \"${SPEC_CTRL_XEN_OFF_VALUE}\"  \"${SPEC_CTRL_OFF_FOR_HVM_VALUE}\"   \"${SPEC_CTRL_OFF_FOR_PV_VALUE}\"  \"${PV_L1TF_OFF_VALUE}\"  "
 			;;
 		DEFAULT|HVM_DEFAULT|PV_DEFAULT|HVM_L1TF_ENABLE)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_DEFAULT_VALUE}\" \"${SPEC_CTRL_DEFAULT_VALUE}\"  \"${PV_L1TF_DEFAULT_VALUE}\"   \"${SPEC_CTRL_DEFAULT_FOR_PV_VALUE}\" \"${SPEC_CTRL_DEFAULT_FOR_HVM_VALUE}\" "
 			;;
 		HVM_PTI_ENABLE|HVM_SPEC2_ENABLE|HVM_SPEC2_USER_ENABLE|HVM_SPEC4_ENABLE)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_ON_VALUE}\" "
 			;;
 		HVM_L1TF_FULL_ENABLE)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_DEFAULT_VALUE}\" \"${SPEC_CTRL_DEFAULT_VALUE}\"  \"${PV_L1TF_DEFAULT_VALUE}\"   \"${SPEC_CTRL_DEFAULT_FOR_PV_VALUE}\" \"${SPEC_CTRL_DEFAULT_FOR_HVM_VALUE}\" "
 			;;
 		PV_PTI_ENABLE)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_ON_VALUE}\" "
 			;;
 		PV_SPEC2_ENABLE|PV_SPEC2_USER_ENABLE|PV_SPEC4_ENABLE)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" \"${SPEC_CTRL_DEFAULT_VALUE}\"  \"${PV_L1TF_OFF_VALUE}\"   \"${SPEC_CTRL_DEFAULT_FOR_PV_VALUE}\" \"${SPEC_CTRL_DEFAULT_FOR_HVM_VALUE}\" "
 			;;
 		PV_L1TF_FULL_ENABLE)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" \"${SPEC_CTRL_DEFAULT_VALUE}\"  \"${PV_L1TF_ON_VALUE}\"   \"${SPEC_CTRL_DEFAULT_FOR_PV_VALUE}\" \"${SPEC_CTRL_DEFAULT_FOR_HVM_VALUE}\" "
 			;;
 		PV_L1TF_ENABLE)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" \"${SPEC_CTRL_DEFAULT_VALUE}\"  \"${PV_L1TF_ON_VALUE}\"   \"${SPEC_CTRL_DEFAULT_FOR_PV_VALUE}\" \"${SPEC_CTRL_DEFAULT_FOR_HVM_VALUE}\" "
 			;;
 		XEN_DISABLE_ONLY)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${SPEC_CTRL_ALL_OFF_VALUE}\" \"${SPEC_CTRL_DEFAULT_FOR_PV_VALUE}\" \"${SPEC_CTRL_DEFAULT_FOR_HVM_VALUE}\" \"${PV_L1TF_DEFAULT_VALUE}\"  "
 			;;
 		HVM_DISABLE_ONLY)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${SPEC_CTRL_OFF_FOR_HVM_VALUE}\" "
 			;;
 		PV_DISABLE_ONLY)
 		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
 			;;
 		MDS_DISABLE_ONLY)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result -v \"${MDS_VALUE}\" "
 			;;
 		MD-CLEAR_DISABLE_ONLY)
-		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_OFF_VALUE}\" "
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result -v \"${MDS_VALUE}\" "
+			;;
+		BTI_RETPOLINE_ONLY)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${}\" "
+			;;
+		BTI_JMP_ONLY)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${SPEC_CTRL_BTI_RETPOLINE_VALUE}\" "
+			;;
+		XPTI_DOM0_ENABLE_ONLY)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_DOM0_OFF_VALUE}\" "
+			;;
+		XPTI_DOMU_ENABLE_ONLY)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${MELTDOWN_DOMU_OFF_VALUE}\" "
+			;;
+		PV_L1TF_DOM0_ON_DOMU_OFF)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${PV_L1TF_DOMU_OFF_VALUE}\" "
+			;;
+		PV_L1TF_DOM0_OFF_DOMU_ON)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${PV_L1TF_DOM0_OFF_VALUE}\" "
+			;;
+		SPEC_CTRL_MSR_SC_OFF)
+		sshpass -p ${password} ssh root@${host_ip} "$(typeset -f ); _verify_xl_result \"${SPEC_CTRL_OFF_FOR_HVM_VALUE}\" \"${SPEC_CTRL_OFF_FOR_PV_VALUE}\"  "
 			;;
 		default)
 			PRINT ERROR  "Input WORD ${catagoary} is in-available" && exit 1
@@ -365,7 +489,7 @@ function mitigation_xen_func_test() {
 	local host_ip=$1
 	shift
 	local user_testcase=$@
-	full_testcases="DEFAULT PV_FULL_DISABLE HVM_PTI_ENABLE PV_SPEC2_ENABLE PV_L1TF_FULL_ENABLE XEN_DISABLE_ONLY HVM_DISABLE_ONLY PV_DISABLE_ONLY MDS_DISABLE_ONLY MD-CLEAR_DISABLE_ONLY"
+	full_testcases="DEFAULT PV_FULL_DISABLE HVM_PTI_ENABLE PV_SPEC2_ENABLE PV_L1TF_FULL_ENABLE XEN_DISABLE_ONLY HVM_DISABLE_ONLY PV_DISABLE_ONLY MDS_DISABLE_ONLY MD-CLEAR_DISABLE_ONLY SPEC_CTRL_MSR_SC_OFF"
 	
 	testcases=$user_testcase
 	[ -z "${user_testcase}" ] && testcases=$full_testcases 
@@ -379,6 +503,36 @@ function mitigation_xen_func_test() {
 	done
 
 }
+
+function_mitigation_xen_combination_func_test() {
+	local host_ip=$1
+	local guest_name=$2
+	shift;shift
+	local user_testcase=$@
+
+
+	full_testcases="PV_FULL_DISABLE PV_SPEC2_ENABLE PV_L1TF_FULL_ENABLE XEN_DISABLE_ONLY HVM_DISABLE_ONLY PV_DISABLE_ONLY MDS_DISABLE_ONLY SPEC_CTRL_MSR_SC_OFF"
+	testcases=$user_testcase
+	[ -z "${user_testcase}" ] && testcases=$full_testcases 
+
+	for case in $testcases
+	do
+		echo "bbb, $case"
+#		vailidate_host_sshd $host_ip 600
+#		set_xen_kernel $host_ip $case & sleep 10
+#		vailidate_host_sshd $host_ip 600
+#		verify_xl_dmesg $host_ip $case
+		for guest in `echo ${guest_name} | sed "s/,/ /g"`
+		do
+			echo "aaaaaaaaa,$guest"
+			sshpass -p susetesting ssh root@${host_ip} "$(typeset -f);$(typeset -p); mitigation_func_test ${guest} MITIGATION_AUTO POSITIVE_ALL_OPTS "
+		done
+	done
+
+
+
+}
+
 
 
 HY_XL_FILE=hy_xl_file.log
@@ -415,12 +569,8 @@ function start_vm() {
 	if virsh list | grep $guestname >/dev/null;then
 		:
 	else
-        output=`virsh start $guestname`
-        if [ $? -ne 0 ];then
-                if ! echo $output | grep -i "Domain is already running" > /dev/null;then
-                        exit -1
-                fi
-        fi
+		virsh start $guestname
+		[ $? -ne 0 ] && exit -1
 	fi
 
 }
@@ -463,7 +613,7 @@ function set_kernel_params() {
 	sed -ie "/^GRUB_CMDLINE_LINUX=/s/\".*\"/\" loglevel=0 $param \"/g" /etc/default/grub
 	grub2-mkconfig -o /boot/grub2/grub.cfg
 	echo "Finished kernel setting for [$param]"
-	sync && poweroff
+	sync #&& poweroff
 }
 
 
@@ -565,7 +715,7 @@ function set_guest_kernel() {
 	PRINT INFO "Guest IP: [ ${guestip}]"
 
 	sshpass -p ${password} ssh root@${guestip} "$(typeset -f); set_mitigation_params ${param}"
-
+	virsh destroy ${guestname}
 }
 
 
@@ -775,8 +925,8 @@ function usage(){
 
 		 COLLECT_FILE \$GUESTNAME \$LOCATION
 
-		 MITIGATION_GUEST_TEST \$GUESTNAME \$CASELIST:
-				MITIGATION_AUTO
+		 MITIGATION_TEST \$GUESTNAME \$CASELIST:
+                                MITIGATION_AUTO
 				MITIGATION_OFF 
 				MITIGATION_AUTO_NOSMT 
 				POSITIVE_ALL_OPTS 
@@ -785,9 +935,7 @@ function usage(){
 				RANDOM_SETTING1 
 				RANDOM_SETTING2 
 				SPECTRE_V2_PRCTL_IBPB 
-				SPECTRE_V2_SECCOMP_IBPB
-
-		 MITIGATION_XEN_TEST \$HOST \$TESTCASE"
+				SPECTRE_V2_SECCOMP_IBPB"
 		 exit -1
 }
 
@@ -803,13 +951,9 @@ case $1 in
 	COLLECT_FILE)
 		collect_hy_files $2 $3
 		;;
-	MITIGATION_GUEST_TEST)
+	MITIGATION_TEST)
 		shift
 		mitigation_func_test $*
-		;;
-	MITIGATION_XEN_TEST)
-		shift
-		mitigation_xen_func_test $*
 		;;
 	*)
 		echo
@@ -817,7 +961,8 @@ case $1 in
 		;;
 esac
 
-mitigation_xen_func_test $*
+#mitigation_xen_func_test $*
+function_mitigation_xen_combination_func_test $*
 #set_guest_kernel $1 MITIGATION_AUTO
 #mitigation_func_test $* 
 #set_parse_xl_params $1
