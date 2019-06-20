@@ -53,7 +53,7 @@ SMT_OFF_FLAG=0
 SMT_OFF="smt=off"
 
 CPUID_ALL_OFF_FLAG=0
-CPUID_ALL_OFF="cpuid=no-ibrsb,no-ibpb,no-stibp,no-ssbd,no-l1d-flush"
+CPUID_ALL_OFF="cpuid=no-ibrsb,no-ibpb,no-stibp,no-ssbd,no-l1d-flush,no-md-clear"
 
 DOM0_PARAMS="dom0_max_vcpus=8 dom0_mem=8192M,max:8192M ucode=scan"
 
