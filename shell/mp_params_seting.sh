@@ -523,8 +523,8 @@ function_mitigation_xen_combination_func_test() {
 	for case in $testcases
 	do
 		PRINT INFO "HYPER CASE: $case"
-		vailidate_host_sshd $host_ip 600
-		set_xen_kernel $host_ip $case & sleep 10
+		#vailidate_host_sshd $host_ip 600
+		#set_xen_kernel $host_ip $case & sleep 10
 		vailidate_host_sshd $host_ip 600
 		verify_xl_dmesg $host_ip $case
 		for guest in `echo ${guest_name} | sed "s/,/ /g"`
@@ -944,7 +944,17 @@ function usage(){
 				RANDOM_SETTING1 
 				RANDOM_SETTING2 
 				SPECTRE_V2_PRCTL_IBPB 
-				SPECTRE_V2_SECCOMP_IBPB"
+				SPECTRE_V2_SECCOMP_IBPB
+
+		MITIGATION_COMBINE_TEST \$HOST \$GUEST \$CASELIST:
+				PV_FULL_DISABLE
+				PV_SPEC2_ENABLE
+				PV_L1TF_FULL_ENABLE
+				XEN_DISABLE_ONLY
+				HVM_DISABLE_ONLY
+				PV_DISABLE_ONLY
+                MDS_DISABLE_ONLY
+				SPEC_CTRL_MSR_SC_OFF"
 		 exit -1
 }
 
@@ -964,6 +974,10 @@ case $1 in
 		shift
 		mitigation_func_test $*
 		;;
+	MITIGATION_COMBINE_TEST)
+		shift
+		function_mitigation_xen_combination_func_test $*
+		;;
 	*)
 		echo
 		#usage
@@ -971,7 +985,7 @@ case $1 in
 esac
 
 #mitigation_xen_func_test $*
-function_mitigation_xen_combination_func_test $*
+#function_mitigation_xen_combination_func_test $*
 #set_guest_kernel $1 MITIGATION_AUTO
 #mitigation_func_test $* 
 #set_parse_xl_params $1
