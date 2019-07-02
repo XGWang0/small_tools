@@ -779,6 +779,7 @@ function verify_mitigation_result(){
 	MELTDOWN_PV_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/meltdown:Unknown (XEN PV detected, hypervisor mitigation required)"
 
 	# Spectre_v2 expected result
+	SPECTRE_V2_HVM_PV_AUTO_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/spectre_v2:Mitigation: Full generic retpoline, IBPB: conditional, STIBP: disabled, RSB filling"
 	SPECTRE_V2_HVM_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/spectre_v2:Mitigation: Full generic retpoline, IBPB: conditional, IBRS_FW, RSB filling"
 	SPECTRE_V2_PV_ON_VALUE="/sys/devices/system/cpu/vulnerabilities/spectre_v2:Mitigation: Full generic retpoline, IBPB: conditional, IBRS_FW, STIBP: conditional, RSB filling"
 
