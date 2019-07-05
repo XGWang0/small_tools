@@ -509,6 +509,27 @@ function mitigation_xen_func_test() {
 
 }
 
+function_mitigation_xen_hyper_test() {
+	local host_ip=$1
+	shift
+	local user_testcase=$@
+
+
+	full_testcases="PV_FULL_DISABLE PV_SPEC2_ENABLE PV_L1TF_FULL_ENABLE XEN_DISABLE_ONLY HVM_DISABLE_ONLY PV_DISABLE_ONLY MDS_DISABLE_ONLY SPEC_CTRL_MSR_SC_OFF"
+	testcases=$user_testcase
+	[ -z "${user_testcase}" ] && testcases=$full_testcases 
+
+	for case in $testcases
+	do
+		PRINT INFO "HYPER CASE: $case"
+		vailidate_host_sshd $host_ip 600
+		set_xen_kernel $host_ip $case & sleep 10
+		vailidate_host_sshd $host_ip 600
+		verify_xl_dmesg $host_ip $case
+	done
+
+}
+
 function_mitigation_xen_combination_func_test() {
 	local host_ip=$1
 	local guest_name=$2
@@ -523,8 +544,8 @@ function_mitigation_xen_combination_func_test() {
 	for case in $testcases
 	do
 		PRINT INFO "HYPER CASE: $case"
-		#vailidate_host_sshd $host_ip 600
-		#set_xen_kernel $host_ip $case & sleep 10
+		vailidate_host_sshd $host_ip 600
+		set_xen_kernel $host_ip $case & sleep 10
 		vailidate_host_sshd $host_ip 600
 		verify_xl_dmesg $host_ip $case
 		for guest in `echo ${guest_name} | sed "s/,/ /g"`
@@ -955,7 +976,18 @@ function usage(){
 				HVM_DISABLE_ONLY
 				PV_DISABLE_ONLY
                 MDS_DISABLE_ONLY
+				SPEC_CTRL_MSR_SC_OFF
+
+		MITIGATION_XEN_HYPER_TEST \$HOST  \$CASELIST:
+				PV_FULL_DISABLE
+				PV_SPEC2_ENABLE
+				PV_L1TF_FULL_ENABLE
+				XEN_DISABLE_ONLY
+				HVM_DISABLE_ONLY
+				PV_DISABLE_ONLY
+                MDS_DISABLE_ONLY
 				SPEC_CTRL_MSR_SC_OFF"
+	
 		 exit -1
 }
 
@@ -978,6 +1010,10 @@ case $1 in
 	MITIGATION_COMBINE_TEST)
 		shift
 		function_mitigation_xen_combination_func_test $*
+		;;
+	MITIGATION_XEN_HYPER_TEST)
+		shift
+		function_mitigation_xen_hyper_test $*
 		;;
 	*)
 		echo
