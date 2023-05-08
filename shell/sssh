@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -x
+sshpass -p nots3cr3t /bin/ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@$1
+
+set +x
