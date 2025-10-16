@@ -1,0 +1,4 @@
+#!ipxe
+kernel http://10.200.129.6/assets/repo/fixed/SLE-15-SP6-Full-x86_64-GM-Media1/boot/x86_64/loader/linux http://10.200.129.6/assets/repo/fixed/SLE-15-SP6-Full-x86_64-GM-Media1/?device=ec:2a:72:02:47:00 ifcfg=ec:2a:72:02:47:00=dhcp4 console=ttyS0 root=/dev/ram0 textmode=1  ssh=1 sshpassword=nots3cr3t  plymouth.enable=0  video=1024x768 vt.color=0x07  Y2DEBUG=1 linuxrc.log=/dev/ttyS0 linuxrc.core=/dev/ttyS0 linuxrc.debug=4,trace  reboot_timeout=0
+initrd http://10.200.129.6/assets/repo/fixed/SLE-15-SP6-Full-x86_64-GM-Media1/boot/x86_64/loader/initrd
+boot

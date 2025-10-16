@@ -1,0 +1,9 @@
+#!ipxe
+  echo Loading kernel
+  kernel http://10.200.129.6/assets/repo/SLES-16.0-Full-x86_64-Build135.5.install/boot/x86_64/loader/linux root=live:http://10.200.129.6/assets/iso/SLES-16.0-Full-x86_64-Build135.5.install.iso live.password=nots3cr3t   inst.finish=stop inst.install_url=http://10.200.134.4/assets/repo/SLES-16.0-x86_64-Build135.5 inst.register_url=http://all-135.5.scc-proxy.suse.asia/ console=ttyS0,115200 linuxrc.log=/dev/ttyS0 linuxrc.core=/dev/ttyS0 linuxrc.debug=4,trace 
+  #kernel http://10.200.129.6/assets/repo/SLES-16.0-Full-x86_64-Build135.5.install/boot/x86_64/loader/linux root=live:http://10.200.129.6/assets/iso/SLES-16.0-Full-x86_64-Build135.5.install.iso live.password=nots3cr3t  inst.auto=http://10.200.129.3:20173/kSrImTmpvwaBhxpb/files/yam/agama/auto/ph043_profile.jsonnet inst.finish=stop inst.install_url=http://10.200.134.4/assets/repo/SLES-16.0-x86_64-Build135.5 inst.register_url=http://all-135.5.scc-proxy.suse.asia/ console=ttyS0,115200 linuxrc.log=/dev/ttyS0 linuxrc.core=/dev/ttyS0 linuxrc.debug=4,trace ip=54-80-28-54-49-00:dhcp
+  echo Loading initrd
+  initrd http://10.200.129.6/assets/repo/SLES-16.0-Full-x86_64-Build135.5.install/boot/x86_64/loader/initrd
+  sleep 3
+  echo Starting the installation
+  boot

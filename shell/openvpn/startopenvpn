@@ -1,0 +1,3 @@
+#!/bin/bash
+
+openvpn --config /etc/openvpn/vpn_bj.opvn --auth-user-pass /etc/openvpn/user-password.prg

@@ -1,0 +1,50 @@
+client
+dev tun
+keepalive 10 30
+auth-user-pass
+script-security 3
+pull
+persist-key
+persist-tun
+remote-cert-tls server
+#ns-cert-type server
+comp-lzo
+verb 4
+
+mute 20
+mute-replay-warnings
+allow-compression asym
+ 
+auth-user-pass
+auth-nocache
+
+auth SHA512
+#cipher AES-256-CBC
+cipher AES-256-GCM
+
+#auth-user-pass /etc/openvpn/user-password
+tls-cipher "DEFAULT:@SECLEVEL=0"
+
+ca /etc/openvpn/SUSE/SUSE_Trust_Root.crt
+#cert /etc/openvpn/SUSE/SUSE-xgwang.crt
+cert /etc/openvpn/SUSE/xgwang-sha256.crt
+key /etc/openvpn/SUSE/SUSE-xgwang.key
+
+tls-auth /etc/openvpn/SUSE/ta_older.key 1
+
+#up   /etc/openvpn/up.sh
+#down /etc/openvpn/down.sh
+
+#Default port 1194 UDP
+<connection>
+        proto udp
+        remote vpn1eng.susecn.com
+        port 1194
+        nobind
+</connection>
+<connection>
+        proto udp
+        remote vpn2eng.susecn.com
+        port 1194
+        nobind
+</connection>
