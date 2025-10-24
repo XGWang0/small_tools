@@ -1,0 +1,186 @@
+#!/bin/bash
+
+
+SOFT_TAG=VT
+SOFT_TAG_BAREMETAL=baremetal
+SOFT_TAG_VM=vm
+SOFT_TAG_HVM=hvm
+SOFT_TAG_PV=pv
+
+SOFT_SUB_TAG="${SOFT_TAG_VM}"
+#SOFT_SUB_TAG="${SOFT_TAG_BAREMETAL} ${SOFT_TAG_VM} ${SOFT_TAG_HVM} ${SOFT_TAG_PV}"
+
+function list_diso() {
+	/usr/share/qa/perfcom/perfcmd.py run list | grep Virt-Performance
+}
+
+function list_pair() {
+	/usr/share/qa/perfcom/perfcmd.py run pair-list | grep Virt-Performance
+}
+
+function create_diso() {
+  mybuild=$1
+  kernel=$2
+  prd_ver=$3
+  soft_tag=$4
+  soft_sub_tag=$5
+  /usr/share/qa/perfcom/perfcmd.py run new -n Virt-Performance -a x86_64 -r ${prd_ver} -b ${mybuild} -k ${kernel} -s ${soft_tag} -ss ${soft_sub_tag}
+  list_diso
+}
+
+function create_all_diso() {
+  mybuild=$1
+  kernel=$2
+  prd_ver=$3
+
+  for soft_sub_tag in ${SOFT_SUB_TAG}
+  do
+	create_diso ${mybuild} ${kernel} ${prd_ver} ${SOFT_TAG} ${soft_sub_tag}
+  done
+}
+
+
+function gen_pair() {
+  current_id=$1
+  reference_id=$2
+
+#  for ref_id in $reference_list
+#  do
+  	/usr/share/qa/perfcom/perfcmd.py run pair-new ${current_id} ${reference_id}
+#  done
+}
+
+function gen_pair_all() {
+  prd_ver=$1
+  limit_num=$2
+  skip_kernel='xxx'
+  declare -A ref_base=( [${SOFT_TAG_BAREMETAL}]=1659 [${SOFT_TAG_VM}]=1965 [${SOFT_TAG_HVM}]=1661 [${SOFT_TAG_PV}]=1662 )
+  for soft_sub_tag in ${SOFT_SUB_TAG}
+  do
+	id_list=`list_diso | grep -i -e "${prd_ver}.*/${soft_sub_tag}" | grep -v -E ${skip_kernel} | cut -d":" -f1 | tail -${limit_num} | sort -n`
+	curr_id=`echo  ${id_list} | awk -F" " '{print $NF}'`
+	ref_id_list=`echo ${id_list} | awk -F" " '{NF=NF-1; print}'`
+	echo "currid =" ${curr_id}
+	echo "ref base =" ${ref_base[${soft_sub_tag}]}
+	gen_pair ${curr_id} ${ref_base[${soft_sub_tag}]}
+	for ref_id in ${ref_id_list}
+	do
+		echo "currid =" ${curr_id}
+		echo "refid =" ${ref_id}
+		echo "gen_pair ${curr_id} ${ref_id}"
+		gen_pair ${curr_id} ${ref_id}
+	done
+  done
+
+}
+
+function gen_result() {
+  mybuild=$1
+  kernel=$2
+  prd_ver=$3
+#                 ph044.qa2.suse.asia vm-kvm-ph044 hvm-xen-ph044 pv-xen-ph044\
+#                 vh004.qa2.suse.asia vm-kvm-vh004 hvm-xen-vh004 pv-xen-vh004\
+  for machine in 1u-perf02.qe.prg2.suse.org vm-kvm-1u-perf02 \
+	         2u-perf02.qe.prg2.suse.org vm-kvm-2u-perf02;
+  do
+    echo "Generate dashboard result to ${machine}" 
+
+    if [[ ${machine} =~ 'qa2.suse.asia' ]];then
+	soft_sub_tag=${SOFT_TAG_BAREMETAL}
+    elif [[ ${machine} =~ 'vm-kvm' ]];then
+	soft_sub_tag=${SOFT_TAG_VM}
+    elif [[ ${machine} =~ 'hvm-xen' ]];then
+	soft_sub_tag=${SOFT_TAG_HVM}
+    elif [[ ${machine} =~ 'pv-xen' ]];then
+        soft_sub_tag=${SOFT_TAG_PV}
+    else
+	soft_sub_tag='tttttt'
+    fi
+    echo "/usr/share/qa/perfcom/perfcmd.py compare-run -n Virt-Performance -a x86_64 -r ${prd_ver} -b ${mybuild} -k ${kernel} -m ${machine} -s ${SOFT_TAG} -ss ${soft_sub_tag}"
+    /usr/share/qa/perfcom/perfcmd.py compare-run -n Virt-Performance -a x86_64 -r ${prd_ver} -b ${mybuild} -k ${kernel} -m ${machine} -s ${SOFT_TAG} -ss ${soft_sub_tag}
+  done
+
+}
+
+function gen_vt_dashboard_result {
+  mybuild=$1
+  kernel=$2
+  prd_ver=$3
+  limit_num=$4
+
+  if [ -z "${limit_num}" ];then
+	limit_num=5
+  fi
+
+  create_all_diso ${mybuild} ${kernel} ${prd_ver}
+  gen_pair_all ${prd_ver} ${limit_num}
+  gen_result ${mybuild} ${kernel} ${prd_ver}
+}
+
+function format_echo {
+  prefix_colon=$1
+  msg=$2
+  echo "${prefix_colon}:$msg"
+
+}
+
+function usage {
+  echo "vt_perf_pairID_gen version 0.0.1                                                                                                                  
+usage: vt_perf_pairID_gen command [command options]                                                                            
+                                                                                                                                        
+    '-h', display this help and exit                                                                                     
+    '-V', output version information and exit                                                                            
+"                                                                                                                                        
+echo "
+Command syntax:
+  list_diso : Display or list all virtualization performance related distrobution information
+  list_pair : Display or list all virtualization performance related comparison pair information
+  create_diso : Create/Generate a virtualization distrobution to dashboard
+     create_diso build_name kernel_version product_version soft_tag soft_sub_tag
+  create_all_diso : Create/Generate all virtualization role distrobution to dashboard
+     create_all_diso build_name kernel_version product_version
+  gen_pair : Generate comparing ID pair
+     gen_pair current_ID reference_ID
+  gen_pair_all : Generate specific number comparing ID pair for all virtualization roles, default limit number :5
+     gen_pair_all product_version [limition_num]
+  gen_result : Gernerate dashboard result according to comparing ID pairs
+     gen_result build_name kernel_version product_version
+  gen_vt_dashboard_result : Create virtualization performance distrobution, comparing ID and generate dashboard result    
+     gen_vt_dashboard_result build_name kernel_version product_version [limition_num]
+"
+
+}
+
+function usage_samples {
+  echo "
+Usage samples:
+  list_diso 
+  list_pair 
+  create_diso beta1 5.3.18-59.19-default sles-15-sp5 VT vm
+  create_all_diso beta1 5.3.18-59.19-default sles-15-sp5
+  gen_pair current_id reference_list
+  gen_pair_all sles-15-sp5 5 
+  gen_result beta1 5.3.18-59.19-default sles-15-sp5
+
+  gen_vt_dashboard_result beta1 5.3.18-59.19-default sles-15-sp5 5
+  "
+}
+
+
+if [ $1 = '-h' ];then
+  usage
+  usage_samples
+  #echo "list_diso "
+  #echo "list_pair "
+  #echo "create_diso beta1 5.3.18-59.19-default sles-15-sp5 VT vm"
+  #echo "create_all_diso beta1 5.3.18-59.19-default sles-15-sp5"
+  #echo "gen_pair current_id reference_list"
+  #echo "gen_pair_all sles-15-sp5 5 "
+  #echo "gen_result beta1 5.3.18-59.19-default sles-15-sp5"
+
+  #echo "gen_vt_dashboard_result beta1 5.3.18-59.19-default sles-15-sp5 5"
+  exit
+fi
+
+
+"$@"
